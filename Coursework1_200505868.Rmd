@@ -1,0 +1,470 @@
+---
+title: "MTH6139 Time Series"
+subtitle: "Coursework 1"
+author:
+- name: Carlota Dujo Sierra # replace this by your name
+date: "March 2024"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+
+<style>
+body {
+text-align: justify;
+toc: true;}
+</style>
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(vembedr)
+library(knitr)    # For knitting document and include_graphics function
+library(ggplot2)  # For plotting
+library(readr)
+library(prophet)
+library(zoo)
+library(fpp2)
+library(htmltools)
+library(htmlwidgets)
+library(tseries)
+library(fable)
+library(forecast)
+library(tseries)
+library(lmtest)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo=FALSE}
+htmltools::img(src = knitr::image_uri("QMlogo.png"), 
+               alt = 'logo', 
+               style = 'position:absolute; top:0; right:0; padding:10px; width:30%;')
+```
+
+
+
+## 1. A Prophet's tutorial  <a id="section-1"></a>
+
+
+<center>
+![](ProphetLogo.png)
+</center>
+
+I found this Youtube tutorial named "Level Up Your Forecasting Skills with Facebook Prophet Model in R" where Data Heroes explain in less than 5 minutes how to use Prophet.
+
+Prophet is a procedure for forecasting time series data based on an additive model where non-linear trends are fit with yearly, weekly, and daily seasonality, plus holiday effects. It works best with time series that have strong seasonal effects and several seasons of historical data. Prophet is robust to missing data and shifts in the trend, and typically handles outliers well.
+
+
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(flexdashboard)
+library(vembedr)
+embed_youtube(id='5FePrZE8WKY', width = 700, height = 315, frameborder = 0,allowfullscreen = TRUE, query = NULL)
+```
+
+The following code is used to upload the data set, create the prophet model, perform a forecast and plot it.
+
+
+```{r message=FALSE, warning=FALSE}
+
+df <- read_csv("df.csv")
+
+# Prophet 
+
+m = prophet(df)
+
+# forecasting
+future = make_future_dataframe(m, periods = 100)
+forecast = predict(m, future)
+plot(m, forecast)
+dyplot.prophet(m, forecast)
+```
+
+
+
+
+## 2. Airpassengers dataset analysis <a id="section-2"></a>
+
+The dataset is called: Monthly Airline Passenger Numbers 1949-1960 and it is available in R.
+
+Description: 
+
+The classic Box & Jenkins airline data. Monthly totals of international airline passengers, 1949 to 1960.
+
+Source: 
+
+Box, G. E. P., Jenkins, G. M. and Reinsel, G. C. (1976) Time Series Analysis, Forecasting and Control. Third Edition. Holden-Day. Series G.
+
+
+
+### 2.1 Exploratory data analysis
+
+```{r message=FALSE, warning=FALSE}
+str(AirPassengers)
+```
+We can see that the Time-Series has 144 observations from 1949 to 1961. 
+
+```{r message=FALSE, warning=FALSE}
+start(AirPassengers)
+
+
+```
+It starts in January 1949.
+
+
+```{r message=FALSE, warning=FALSE}
+end(AirPassengers)
+```
+It ends in December 1960.
+
+```{r message=FALSE, warning=FALSE}
+frequency(AirPassengers)
+```
+The frequency of the time series is 12.
+
+```{r message=FALSE, warning=FALSE}
+summary(AirPassengers)
+```
+From the summary the minimum value is of 104, the maximum is of 622 and the mean is of 280.3. And there are no missing values.
+
+```{r message=FALSE, warning=FALSE}
+#This will plot the time series
+ts.plot(AirPassengers, 
+        xlab="Year", 
+        ylab="Number of Passengers",
+        main="Monthly totals of international airline passengers, 1949-1960")
+# This will fit in a line
+abline(reg=lm(AirPassengers~time(AirPassengers)), col = "red")
+```
+
+
+```{r message=FALSE, warning=FALSE}
+library(dygraphs)
+dygraph(AirPassengers, main = "Airpassengers") %>% 
+  dyRangeSelector(dateWindow = c("1949-01-01", "1960-01-01"))
+```
+
+We can see from the plots above that there is trend, seasonality and the variance increases with the time. 
+
+
+
+```{r message=FALSE, warning=FALSE}
+boxplot(AirPassengers~cycle(AirPassengers))
+```
+
+From the previous graph we can see that July and August are the months where people travel more since they fall in summer vactions.
+
+
+```{r message=FALSE, warning=FALSE}
+plot(decompose(AirPassengers))
+```
+
+I have deocomposed the time series into trend, seasonality and white noise in the previous graph.
+
+
+### 2.2 Box-Cox transformation
+
+Since we saw that the variance increases with the time I will find the lambda value that stabilizes it from the Box Cox transformation. 
+
+```{r message=FALSE, warning=FALSE}
+(lambda <- BoxCox.lambda(AirPassengers))
+```
+The lambda value is `r lambda`. I transform the data with this value and plot the result.
+
+
+```{r message=FALSE, warning=FALSE}
+airpassengers_transformed <- BoxCox(AirPassengers, lambda)
+
+plot(airpassengers_transformed, main="Box-Cox Transformed AirPassengers Data", ylab="Transformed Passengers")
+
+```
+
+We can see now that we have solved the problem of non constant variance.
+
+
+### 2.3 Differences to remove trend
+
+
+It is required to perform 1 difference in order to remove the trend.
+
+```{r message=FALSE, warning=FALSE}
+ndiffs(airpassengers_transformed)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+adf.test(airpassengers_transformed); pp.test(airpassengers_transformed); kpss.test(airpassengers_transformed)
+```
+
+So the above results indicate the presence of a unit root (with the KPSS test), while the ADF and PP tests indicate stationarity. We therefore can't conclusively say that the series is stationary. Let's try out these same tests after differencing.
+
+
+```{r message=FALSE, warning=FALSE}
+diff_dat <- diff(airpassengers_transformed)
+
+adf.test(diff_dat); pp.test(diff_dat); kpss.test(diff_dat)
+```
+With one difference we obtain the stationary series.
+
+```{r message=FALSE, warning=FALSE}
+plot(diff_dat)
+```
+
+We have eventually removed the trend and the non homogeneous variance. 
+
+
+
+### 2.4 Fit a linear regression
+
+
+```{r message=FALSE, warning=FALSE}
+# Fit a linear model with time as the predictor
+time <- seq_along(AirPassengers)
+model <- lm(airpassengers_transformed ~ time)
+summary(model)
+
+```
+After fitting the simple linear regression time variable  is statistically significant since the p-value is close to 0.
+
+```{r message=FALSE, warning=FALSE}
+# Perform the Breusch-Pagan test
+bptest(model)
+```
+We keep the null hypothesis of homoskedasticity since the p-value is very large (0.7679).
+
+
+
+### 2.5 Forecasting with Prophet
+
+First we need to create the needed dataframe. 
+
+```{r message=FALSE, warning=FALSE}
+airpas.df = data.frame(
+  ds=as.yearmon(time(AirPassengers)), 
+  y=AirPassengers)
+```
+
+Now, we create the model and we store it in **m**:
+
+```{r message=FALSE, warning=FALSE}
+m <- prophet::prophet(airpas.df)
+```
+
+We create 365 future values and we store them in **future**
+
+
+```{r message=FALSE, warning=FALSE}
+future = prophet::make_future_dataframe(m, periods=365)
+```
+
+
+We perform the prediction stored in **forecast** and we plot them.
+```{r message=FALSE, warning=FALSE}
+forecast = predict(m, future)
+
+plot(m,forecast)
+```
+
+
+
+
+```{r message=FALSE, warning=FALSE}
+dyplot.prophet(m, forecast)
+
+```
+
+
+In the following graph we decompose the trend and seasonality.
+
+```{r message=FALSE, warning=FALSE}
+prophet_plot_components(m, forecast)
+```
+
+
+
+
+
+## 3. Forecasting with ETS models 
+
+
+### 3.1 Analysis from Data Camp course (Forecasting in R)
+
+
+From the book of (Hyndman and Athanasopoulos, 2023): You can go to section [4. Bibliography](#bibliography) to check all references.
+
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(flexdashboard)
+library(vembedr)
+embed_youtube(id='45nrAlpIC28', width = 700, height = 315, frameborder = 0,allowfullscreen = TRUE, query = NULL)
+```
+
+
+
+
+
+<center>
+<https://otexts.com/fpp2/ets-forecasting.html>
+</center>
+
+
+Particularly Exponential Smoothing State Space models (ETS models). 
+
+For example, for model 
+
+ETS(M,A,N), 
+
+\( \hat{y}_{T+h|T} = (l_T + h b_T)(1 + \varepsilon_{T+1}) \)
+
+Therefore 
+
+\( \hat{y}_{T+1|T} = l_T + b_T \)
+
+Similarly,
+
+\( \hat{y}_{T+2} = (l_{T+1} + b_{T+1})(1 + \varepsilon_{T+2}) = [(l_T + b_T)(1 + \alpha\varepsilon_{T+1}) + b_T + \beta(l_T + b_T)\varepsilon_{T+1}](1 + \varepsilon_{T+2}) \)
+
+Therefore, 
+
+\( \hat{y}_{T+2|T} = l_T + 2b_T \), 
+
+and so on. 
+
+These forecasts are identical to the forecasts from Holt's linear method, and also to those from model ETS(A,A,N). Thus, the point forecasts obtained from the method and from the two models that underlie the method are identical (assuming that the same parameter values are used). ETS point forecasts constructed in this way are equal to the means of the forecast distributions, except for the models with multiplicative seasonality (Hyndman et al., 2008).
+
+To obtain forecasts from an ETS model, we use the `forecast()` function from the `fable` package. This function will always return the means of the forecast distribution, even when they differ from these traditional point forecasts.
+
+```{r message=FALSE, warning=FALSE}
+aust <- window(austourists, start=2005)
+fit <- ets(aust)
+summary(fit)
+
+```
+```{r message=FALSE, warning=FALSE}
+autoplot(fit)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+fit %>% forecast(h=8) %>%
+  autoplot() +
+  ylab("International visitor night in Australia (millions)")
+```
+
+
+Prediction intervals within the context of statistical forecasting models. Here is the transcription:
+
+For most ETS models, a prediction interval can be written as
+
+\( \hat{y}_{T+h|T} \pm c\sigma_h \),
+
+where c depends on the coverage probability, and \( \sigma^2_h \) is the forecast variance. Values for c were given in Table 5.1. For ETS models, formulas for \( \sigma^2_h \) can be complicated; the details are given in Chapter 6 of Hyndman et al. (2008). In Table 7.8 we give the formulas for the additive ETS models, which are the simplest.
+
+
+Table 7.8: Forecast variance expressions for each additive state space model, where \( \sigma^2 \) is the residual variance, \( m \) is the seasonal period, and \( k \) is the integer part of \( (h - 1)/m \) (i.e., the number of complete years in the forecast period prior to time \( T + h \)).
+
+
+
+Model (A,N,N):
+\[ \sigma^2_h = \sigma^2 [1 + \alpha^2(h - 1)] \]
+
+Model (A,A,N):
+\[ \sigma^2_h = \sigma^2 [1 + (h - 1)\{\alpha^2 + \alpha\beta h + \frac{1}{6}\beta^2h(2h - 1)\}] \]
+
+Model (A,Ad,N):
+\[ \sigma^2_h = \sigma^2 [1 + \alpha^2(h - 1) + \frac{\beta\phi h}{(1-\phi)^2} \{2\alpha(1 - \phi) + \beta\phi\} - \frac{\beta\phi(1-\phi^h)}{(1-\phi)^2(1-\phi^2)} \{2\alpha(1 - \phi) + \beta\phi(1 + 2\phi - \phi^h)\}] \]
+
+Model (A,N,A):
+\[ \sigma^2_h = \sigma^2 [1 + \alpha^2(h - 1) + \gamma k(2\alpha + \gamma)] \]
+
+Model (A,A,A):
+\[ \sigma^2_h = \sigma^2 [1 + (h - 1)\{\alpha^2 + \alpha\beta h + \frac{1}{6}\beta^2h(2h - 1)\} + \gamma k \{2\alpha + \gamma + \beta m(k + 1)\}] \]
+
+Model (A,Ad,A):
+\[ \sigma^2_h = \sigma^2 [1 + \alpha^2(h - 1) + \gamma k(2\alpha + \gamma) + \frac{\beta\phi h}{(1-\phi)^2} \{2\alpha(1 - \phi) + \beta\phi\} - \frac{\beta\phi(1-\phi^h)}{(1-\phi)^2(1-\phi^2)} \{2\alpha(1 - \phi) + \beta\phi(1 + 2\phi - \phi^h)\} + \frac{2\beta\gamma h}{(1-\phi)(1-\phi^m)} \{k(1 - \phi) - \phi^m(1 - \phi^{mk})\}] \]
+
+These expressions are used to calculate the forecast variance for different ETS models, which are categorized by whether they have an additive (A) or multiplicative (M) trend, and whether they include a damping factor (d) in the trend. The components \( \alpha \), \( \beta \), and \( \gamma \) are smoothing parameters for the level, trend, and seasonal components, respectively. The \( \phi \) represents the damping factor, and \( \sigma^2 \) is the residual variance of the model.
+
+
+### 3.2 Analysis with Prophet
+
+
+We create first the adequate dataframe:
+
+```{r message=FALSE, warning=FALSE}
+aust.df = data.frame(
+  ds=as.yearmon(time(austourists)), 
+  y=austourists)
+```
+
+We compute then the model, future and forecast adjusting the frequency to quarter:
+```{r message=FALSE, warning=FALSE}
+m <- prophet::prophet(aust.df)
+future = prophet::make_future_dataframe(m, periods=8,freq = "quarter")
+forecast = predict(m, future)
+```
+We plot a static graph:
+
+```{r message=FALSE, warning=FALSE}
+plot(m,forecast)
+```
+
+Finally we plot a dynamic graph:
+
+```{r message=FALSE, warning=FALSE}
+dyplot.prophet(m, forecast)
+```
+
+
+### 3.3 Comparing the models
+
+
+```{r message=FALSE, warning=FALSE}
+  (b<-sqrt(sum(fit$residuals^2)))
+  a<- as.vector(forecast[c('yhat')])
+  (c<-sqrt(sum((aust.df$y- a$yhat[1:68])^2)))
+#sum(fit$residuals^2)
+```
+
+The value of the squared root of the sum of the residuals for the ets model is `r b` and for the Prophet model is `r c`.
+
+Thus the performance with this metric is worst with the Prophet model.
+
+##  4. Bibliography
+
+[](#bibliography)
+
+Hand, D. J. (2009). Forecasting with Exponential Smoothing: The State Space Approach by Rob J. Hyndman, Anne B. Koehler, J. Keith Ord, Ralph D. Snyder. International Statistical Review, 77(2), 315–316. https://doi.org/10.1111/J.1751-5823.2009.00085_17.X
+
+Hyndman, Rob J.  (2023). Rob J Hyndman – Forecasting with Exponential Smoothing: the State Space Approach. https://robjhyndman.com/expsmooth/
+
+Hyndman, Rob J. . (2024). Forecasting in R - DataCamp Learn. https://app.datacamp.com/learn/courses/forecasting-in-r
+
+Hyndman,   Rob J.  and Athanasopoulos, George. (2023). 7.7 Forecasting with ETS models | Forecasting: Principles and Practice (2nd ed). https://otexts.com/fpp2/ets-forecasting.html
+
+Peterson, Amy. (2024). Reporting with R Markdown - DataCamp Learn. https://app.datacamp.com/learn/courses/reporting-with-rmarkdown
+
+Wickham, H. (2016). Ggplot2 : elegant graphics for data analysis.
+
+<br>
+<hr>
+<br>
+
+::: {.floatting}
+```{r echo=FALSE, out.extra='style="float:left; padding:20px"', out.width='20%'}
+knitr::include_graphics("GeorgeBox.jpg")
+```
+<br>
+<br>
+
+####  *"All models are wrong, but some are useful."*
+<br>
+― [George Box](https://en.wikipedia.org/wiki/All_models_are_wrong)
+:::
